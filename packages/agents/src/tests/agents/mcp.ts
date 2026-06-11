@@ -12,6 +12,8 @@ import {
   Agent,
   callable,
   getCurrentAgent,
+  runWithAgentContext,
+  __DO_NOT_USE_WILL_BREAK__agentContext as agentContext,
   type AgentContext
 } from "../../index.ts";
 import {
@@ -222,6 +224,116 @@ export class TestMcpAgent extends McpAgent<Cloudflare.Env, unknown, Props> {
         return {
           content: [{ type: "text", text: "Custom elicit cancelled" }]
         };
+      }
+    );
+
+    // The next three tools run their body inside `agentContext.exit(...)`,
+    // i.e. with an empty AsyncLocalStorage store. This simulates host-side
+    // callbacks reached outside the original invocation's call tree — e.g.
+    // via RPC from a Worker Loader child isolate or a service binding —
+    // where `getCurrentAgent()` returns undefined. Regression coverage for
+    // https://github.com/cloudflare/agents/issues/1490.
+    this.server.tool(
+      "elicitNameOutsideContext",
+      "Elicit user input from outside the agent ALS context (request-scoped send)",
+      {},
+      async (_args, extra) => {
+        const result = await agentContext.exit(() =>
+          this.server.server.elicitInput(
+            {
+              message: "What is your name?",
+              requestedSchema: {
+                type: "object",
+                properties: {
+                  name: {
+                    type: "string",
+                    description: "Your name"
+                  }
+                },
+                required: ["name"]
+              }
+            },
+            { relatedRequestId: extra.requestId }
+          )
+        );
+
+        if (result.action === "accept" && result.content?.name) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Outside-context elicit: ${result.content.name}`
+              }
+            ]
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: "Outside-context elicit cancelled" }]
+        };
+      }
+    );
+
+    this.server.tool(
+      "elicitNameOutsideContextStandalone",
+      "Elicit user input from outside the agent ALS context (standalone GET stream send)",
+      {},
+      async () => {
+        // No relatedRequestId: the elicit request goes out on the
+        // standalone GET stream via the transport's sendStandalone path.
+        const result = await agentContext.exit(() =>
+          this.server.server.elicitInput({
+            message: "What is your name?",
+            requestedSchema: {
+              type: "object",
+              properties: {
+                name: {
+                  type: "string",
+                  description: "Your name"
+                }
+              },
+              required: ["name"]
+            }
+          })
+        );
+
+        if (result.action === "accept" && result.content?.name) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Standalone outside-context elicit: ${result.content.name}`
+              }
+            ]
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Standalone outside-context elicit cancelled"
+            }
+          ]
+        };
+      }
+    );
+
+    this.server.tool(
+      "agentContextProbe",
+      "Report getCurrentAgent() outside the ALS context, bare and re-entered via runWithAgentContext",
+      {},
+      async () => {
+        const probe = agentContext.exit(() => {
+          const bareAgent = getCurrentAgent().agent;
+          const restored = runWithAgentContext(this, () => getCurrentAgent());
+          return {
+            bareAgentIsUndefined: bareAgent === undefined,
+            restoredAgentIsThis: restored.agent === this,
+            restoredConnectionIsUndefined: restored.connection === undefined
+          };
+        });
+        return { content: [{ type: "text", text: JSON.stringify(probe) }] };
       }
     );
 

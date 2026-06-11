@@ -128,6 +128,15 @@ export class StreamableHTTPServerTransport implements Transport {
   private _started = false;
   private _eventStore?: EventStore | ClearableEventStore;
 
+  // Captured at construction (always inside agent context, see constructor)
+  // so that `send()` works from call sites with no ALS ancestry in the
+  // original invocation — e.g. server-initiated requests (elicitation,
+  // sampling) issued from a host-side callback invoked via Worker Loader
+  // child→host RPC, a service binding, or a queue consumer. The transport
+  // is owned by its agent (same DO, same lifetime), so the reference
+  // cannot go stale. See cloudflare/agents#1490.
+  private _agent: McpAgent;
+
   // This tracks which messages on each POST stream have been answered.
   // It is fine that we do not persist this since it only supports backwards
   // compatibility for clients batching requests, which the spec discourages.
@@ -157,6 +166,7 @@ export class StreamableHTTPServerTransport implements Transport {
 
     // Initialization is handled in `McpAgent.serve()` and agents are addressed by sessionId,
     // so we'll always have this available.
+    this._agent = agent;
     this.sessionId = agent.getSessionId();
     this._eventStore = options.eventStore;
   }
@@ -423,8 +433,7 @@ export class StreamableHTTPServerTransport implements Transport {
 
   async close(): Promise<void> {
     // Close all SSE connections
-    const { agent } = getCurrentAgent();
-    if (!agent) throw new Error("Agent was not found in close");
+    const agent = this._agent;
 
     for (const conn of agent.getConnections()) {
       conn.close(1000, "Session closed");
@@ -519,8 +528,10 @@ export class StreamableHTTPServerTransport implements Transport {
    * there is at most one to send on.
    */
   private async sendStandalone(message: JSONRPCMessage): Promise<void> {
-    const { agent } = getCurrentAgent<McpAgent>();
-    if (!agent) throw new Error("Agent was not found in send");
+    // Use the captured agent rather than getCurrentAgent(): server-initiated
+    // sends may originate from code with no agent context on the call stack
+    // (e.g. a callback reached via cross-isolate RPC). See #1490.
+    const agent = this._agent;
 
     const eventId = await this._eventStore?.storeEvent(
       STANDALONE_STREAM_ID,
@@ -549,9 +560,16 @@ export class StreamableHTTPServerTransport implements Transport {
     message: JSONRPCMessage,
     requestId: RequestId
   ): Promise<void> {
-    const { agent, connection: originatingConnection } =
-      getCurrentAgent<McpAgent>();
-    if (!agent) throw new Error("Agent was not found in send");
+    const agent = this._agent;
+    // The originating connection is request-scoped, so it can only come from
+    // ALS — but it's purely an optimization for disambiguating colliding
+    // request ids, so its absence (e.g. when sending from a callback reached
+    // via cross-isolate RPC, see #1490) is fine. Ignore the store entirely
+    // when it belongs to a different agent (e.g. an agent-to-agent call)
+    // so a foreign connection can never influence routing.
+    const context = getCurrentAgent<McpAgent>();
+    const originatingConnection =
+      context.agent === agent ? context.connection : undefined;
 
     // Pick the live connection that should receive this message. Normally
     // request ids uniquely identify a POST connection. If a client violates
