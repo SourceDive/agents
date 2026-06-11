@@ -1367,53 +1367,6 @@ export function getCurrentAgent<
 }
 
 /**
- * Runs `fn` inside the given agent's context so that `getCurrentAgent()` —
- * and every API that depends on it, such as server-initiated MCP requests
- * (`elicitInput`, `createMessage`, `listRoots`) — resolves the agent.
- *
- * The agent context is carried by `AsyncLocalStorage`, which only propagates
- * along the call tree of the original invocation. Code reached any other way
- * starts with an empty context and must re-enter it with this helper. Common
- * cases:
- * - a host-side callback invoked via RPC from a Worker Loader child isolate
- *   (e.g. sandboxed tool execution / codemode),
- * - calls arriving over a service binding or Durable Object RPC,
- * - queue consumers and other entrypoints that hold an agent reference.
- *
- * If `agent` is already the current agent, `fn` runs unchanged. Otherwise it
- * runs with `connection`, `request`, and `email` unset: context entered this
- * way is not tied to any live client I/O, and handles from a previous turn
- * must not leak into it.
- *
- * Public agent methods are wrapped with this behavior automatically, so
- * calling `agent.someMethod()` needs no manual wrapping; this helper is for
- * arbitrary closures.
- *
- * @param agent The agent to run within
- * @param fn The function to run inside the agent's context
- * @returns The return value of `fn`
- */
-export function runWithAgentContext<T>(
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any -- accept any concrete Agent subclass regardless of Env/State parameters
-  agent: Agent<any, any>,
-  fn: () => T
-): T {
-  const { agent: current } = getCurrentAgent();
-  if (current === agent) {
-    return fn();
-  }
-  return agentContext.run(
-    {
-      agent,
-      connection: undefined,
-      request: undefined,
-      email: undefined
-    },
-    fn
-  );
-}
-
-/**
  * Wraps a method to run within the agent context, ensuring getCurrentAgent() works properly
  * @param agent The agent instance
  * @param method The method to wrap

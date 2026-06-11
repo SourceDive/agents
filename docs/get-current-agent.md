@@ -124,24 +124,23 @@ export class MyAgent extends AIChatAgent {
 }
 ```
 
-## When Context Is Lost: `runWithAgentContext()`
+## When Context Is Lost
 
-The agent context is carried by `AsyncLocalStorage`, which only propagates
-along the call tree of the original invocation. Code reached **outside** that
-call tree starts with an empty context, so `getCurrentAgent()` returns
-`undefined` there. Common cases:
+The agent context only propagates along the call tree of the original
+invocation. Code reached **outside** that call tree starts with an empty
+context, so `getCurrentAgent()` returns `undefined` there. Common cases:
 
 - A host-side callback invoked via **RPC from a Worker Loader child isolate**
   (e.g. sandboxed tool execution / codemode)
 - Calls arriving over a **service binding** or **Durable Object RPC**
 - **Queue consumers** and other entrypoints that hold an agent reference
 
-If such code only calls public methods on your agent (`agent.someMethod()`),
-nothing is needed — those are wrapped automatically. For arbitrary closures
-that rely on `getCurrentAgent()` internally, re-enter the context explicitly:
+The fix is to route such callbacks through a **public method on your agent
+class** — custom methods are automatically wrapped, so calling
+`agent.someMethod()` re-enters the agent's context no matter how the caller
+was reached:
 
 ```typescript
-import { runWithAgentContext } from "agents";
 import { RpcTarget } from "cloudflare:workers";
 
 class HostCallbackBridge extends RpcTarget {
@@ -149,29 +148,31 @@ class HostCallbackBridge extends RpcTarget {
     super();
   }
 
-  // Invoked via RPC from a Worker Loader child isolate — no ALS ancestry,
-  // so the agent context must be re-entered before using context-dependent
-  // APIs like getCurrentAgent().
+  // Invoked via RPC from a Worker Loader child isolate — no context
+  // ancestry. Calling a public agent method restores it automatically.
   async invoke() {
-    return runWithAgentContext(this.agent, async () => {
-      const { agent } = getCurrentAgent<MyMcpAgent>();
-      // ✅ agent is available again
-    });
+    return this.agent.handleSandboxCallback();
+  }
+}
+
+export class MyMcpAgent extends McpAgent {
+  async handleSandboxCallback() {
+    const { agent } = getCurrentAgent<MyMcpAgent>();
+    // ✅ agent is available again
   }
 }
 ```
 
-Context entered this way has `connection`, `request`, and `email` unset: it is
-not tied to any live client I/O. If the given agent is already the current
-agent, the function runs unchanged.
+Context restored this way has `connection`, `request`, and `email` unset: it
+is not tied to any live client I/O.
 
 > Note: server-initiated MCP requests (`elicitInput`, `createMessage`,
-> `listRoots`) on `McpAgent` do **not** require this wrapping — the MCP
+> `listRoots`) on `McpAgent` do **not** require any of this — the MCP
 > transport resolves its agent independently of the calling context.
 
 ## API Reference
 
-The agents package exports two functions for context management:
+The agents package exports one main function for context management:
 
 ### `getCurrentAgent<T>()`
 
@@ -200,27 +201,4 @@ export class MyAgent extends AIChatAgent {
     // connection and request available if called from a request handler
   }
 }
-```
-
-### `runWithAgentContext<T>(agent, fn)`
-
-Runs `fn` inside the given agent's context so `getCurrentAgent()` resolves the
-agent. Use it in callbacks reached outside the original invocation's call tree
-(cross-isolate RPC, service bindings, queue consumers — see above).
-
-**Parameters:**
-
-- `agent` — the agent instance to run within
-- `fn` — the function to execute; its return value is returned
-
-**Usage:**
-
-```typescript
-import { getCurrentAgent, runWithAgentContext } from "agents";
-
-const result = runWithAgentContext(agent, () => {
-  const { agent: current } = getCurrentAgent();
-  // current === agent
-  return doSomethingContextDependent();
-});
 ```

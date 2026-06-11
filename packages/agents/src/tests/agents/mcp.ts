@@ -12,7 +12,6 @@ import {
   Agent,
   callable,
   getCurrentAgent,
-  runWithAgentContext,
   __DO_NOT_USE_WILL_BREAK__agentContext as agentContext,
   type AgentContext
 } from "../../index.ts";
@@ -227,7 +226,7 @@ export class TestMcpAgent extends McpAgent<Cloudflare.Env, unknown, Props> {
       }
     );
 
-    // The next three tools run their body inside `agentContext.exit(...)`,
+    // The next two tools run their body inside `agentContext.exit(...)`,
     // i.e. with an empty AsyncLocalStorage store. This simulates host-side
     // callbacks reached outside the original invocation's call tree — e.g.
     // via RPC from a Worker Loader child isolate or a service binding —
@@ -316,24 +315,6 @@ export class TestMcpAgent extends McpAgent<Cloudflare.Env, unknown, Props> {
             }
           ]
         };
-      }
-    );
-
-    this.server.tool(
-      "agentContextProbe",
-      "Report getCurrentAgent() outside the ALS context, bare and re-entered via runWithAgentContext",
-      {},
-      async () => {
-        const probe = agentContext.exit(() => {
-          const bareAgent = getCurrentAgent().agent;
-          const restored = runWithAgentContext(this, () => getCurrentAgent());
-          return {
-            bareAgentIsUndefined: bareAgent === undefined,
-            restoredAgentIsThis: restored.agent === this,
-            restoredConnectionIsUndefined: restored.connection === undefined
-          };
-        });
-        return { content: [{ type: "text", text: JSON.stringify(probe) }] };
       }
     );
 

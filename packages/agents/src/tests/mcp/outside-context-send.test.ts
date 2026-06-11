@@ -147,38 +147,4 @@ describe("server-initiated sends outside the agent ALS context", () => {
 
     await standaloneReader.cancel();
   });
-
-  it("runWithAgentContext re-enters the agent context from an empty store", async () => {
-    const ctx = createExecutionContext();
-    const sessionId = await initializeStreamableHTTPServer(ctx);
-
-    const toolCallMsg: JSONRPCMessage = {
-      id: "ctx-probe-1",
-      jsonrpc: "2.0",
-      method: "tools/call",
-      params: { name: "agentContextProbe", arguments: {} }
-    };
-
-    const toolResponse = await sendPostRequest(
-      ctx,
-      baseUrl,
-      toolCallMsg,
-      sessionId
-    );
-    expect(toolResponse.status).toBe(200);
-
-    const reader = toolResponse.body?.getReader();
-    if (!reader) throw new Error("No reader available for POST stream");
-
-    const resultFrame = await readOneFrame(reader);
-    const toolResult = parseSSEData(resultFrame) as JSONRPCResultResponse;
-    const result = toolResult.result as CallToolResult;
-    const text = (result.content[0] as { type: "text"; text: string }).text;
-
-    expect(JSON.parse(text)).toEqual({
-      bareAgentIsUndefined: true,
-      restoredAgentIsThis: true,
-      restoredConnectionIsUndefined: true
-    });
-  });
 });
