@@ -87,6 +87,7 @@ Keep it concise. A few paragraphs is fine. These are records, not essays.
 | `rfc-sub-agents.md`                     | RFC        | Sub-agents — child DOs via facets, typed stubs, built into Agent (accepted)                              |
 | `rfc-sub-agent-routing.md`              | RFC        | Sub-agent external addressability — nested URLs, `onBeforeSubAgent`, per-call bridge                     |
 | `rfc-helper-sub-agent-orchestration.md` | RFC        | Agent tool orchestration — `runAgentTool`, `agentTool`, event forwarding                                 |
+| `rfc-detached-agent-tools.md`           | RFC        | Detached ("background") agent-tool runs — `detached` mode, durable named-method completion hook          |
 | `rfc-think-multi-session.md`            | RFC        | Multi-session Think / Chats pattern — parent directory + per-chat child DOs                              |
 | `rfc-chat-recovery-work-budget.md`      | RFC        | Decouple chat-recovery duration from the runaway guard — work budget + `shouldKeepRecovering` (accepted) |
 | `rfc-ai-chat-maintenance.md`            | RFC        | AIChatAgent first-class stance, shared chat toolkit, multi-session example direction                     |
