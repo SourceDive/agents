@@ -7539,7 +7539,7 @@ export class Agent<
     _result: AgentToolLifecycleResult
   ): Promise<void> {}
 
-  async runAgentTool<Input = unknown, Output = unknown>(
+  async runAgentTool<Input = unknown>(
     cls: ChatCapableAgentClass,
     options: RunAgentToolOptions<Input> & {
       detached: true | DetachedAgentToolConfig;
