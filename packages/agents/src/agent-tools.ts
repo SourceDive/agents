@@ -176,6 +176,8 @@ export type {
   AgentToolStoredChunk,
   AgentToolTerminalStatus,
   ChatCapableAgentClass,
+  DetachedAgentToolConfig,
+  DetachedRunAgentToolResult,
   RunAgentToolOptions,
   RunAgentToolResult
 } from "./agent-tool-types";
