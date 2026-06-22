@@ -1,5 +1,11 @@
 # @cloudflare/codemode
 
+## 0.4.2
+
+### Patch Changes
+
+- [#1791](https://github.com/cloudflare/agents/pull/1791) [`9c85369`](https://github.com/cloudflare/agents/commit/9c85369a3f8bcfc0a2c4c3a559623cb5943c5fdd) Thanks [@mattzcarey](https://github.com/mattzcarey)! - Remove the root entry's runtime dependency on the optional `ai` and `zod` peers. Executor and runtime imports now bundle without either framework package installed.
+
 ## 0.4.1
 
 ### Patch Changes
